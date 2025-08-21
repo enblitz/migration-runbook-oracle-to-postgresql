@@ -2,7 +2,6 @@
 
 This guide details the steps to migrate an Oracle database to PostgreSQL. The migration process includes structure migration and data migration.
 
----
 
 ## Prerequisites
 
@@ -49,9 +48,8 @@ Before beginning the migration process, ensure the following software and enviro
 11. **Configure PostgreSQL Database for Performance Optimization**
     Configure parameters like `shared_buffers`, `work_mem`, `maintenance_work_mem`, and others for performance.
 
----
 
-## Migration Steps
+# Migration Steps
 
 ### Structure Migration (Estimated Time: 4 Hours)
 
@@ -118,8 +116,6 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA <schema_name> TO <username>;
    psql -U <user> -d <database> -h <host> -p <port> -f <backup-file>.sql
    ```
 
----
-
 #### **Option 2: Structure Migration Using AWS Schema Conversion Tool (SCT)**
 
 **Expected Time: 4 hours**
@@ -153,8 +149,6 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA <schema_name> TO <username>;
    * Validate that the selected objects are correctly reflected in the PostgreSQL schema.
 
 Repeat steps 6-8 for each table/object as necessary.
-
----
 
 ### Step 2. Data Migration (Using Ora2pg)
 
@@ -417,9 +411,8 @@ Repeat steps 6-8 for each table/object as necessary.
     index count 
     constraint count
     ```
----
 
-## Known Issues and Solutions
+# Known Issues and Solutions
 
 1. **Manual Data Migration for Each Table**
 
@@ -445,9 +438,7 @@ Repeat steps 6-8 for each table/object as necessary.
 
    * Ensure that sequences are properly migrated and adjusted. If not, run the sequence adjustment query after the data migration process.
 
----
-
-## Post-Migration Validation
+# Post-Migration Validation
 
 1. **Validate Table Structures**:
    Check that all tables, indexes, and constraints have been correctly migrated to the PostgreSQL database.
@@ -458,9 +449,72 @@ Repeat steps 6-8 for each table/object as necessary.
 3. **Test Application**:
    Perform tests on the application that relies on the database to ensure it functions correctly with the new PostgreSQL backend.
 
----
 
-## Additional Notes
+# Additional Notes
 
 * The time estimates for each stage are approximations and may vary depending on the size of the database and network latency.
 * It is recommended to run the migration first in a test or UAT environment before performing it in production.
+
+
+# GRANT AWS_ORACLE_EXTENSION
+
+```sql
+GRANT USAGE ON SCHEMA aws_oracle_ext TO <user>;
+```
+
+# PGCRON
+
+please confirm the following configurations to ensure that **pg\_cron** can successfully run jobs on PostgreSQL
+
+1. **Verify the following parameters in the `postgresql.conf` file:**
+
+   ```
+   shared_preload_libraries = 'pg_cron'
+   cron.database_name = 'appdbuat' (database name on which scheduler/job will configur)
+   ```
+
+2. **Verify the following entry in the `pg_hba.conf` file** to allow connections only from the local server:
+
+   ```
+   host    all    all    127.0.0.1/32    trust
+   ```
+
+3. **Create the `pg_cron` extension** by connecting to the database specified in the `cron.database_name` parameter:
+
+   ```sql
+   CREATE EXTENSION pg_cron;
+   ```
+
+4. **Create job** 
+
+   ```sql
+   SELECT cron.schedule(
+   'job_tag_as_expired',
+   '*/15 * * * *',
+   'CALL sp_tag_as_expired()'
+   );
+   ```
+
+5. **Update job** you cannot directly update an existing job using a command like UPDATE. Instead, the typical approach is
+
+      #### a. Find the job ID:
+
+      ```sql
+      SELECT jobid, schedule, command FROM cron.job WHERE jobname = 'job_tag_as_expired';
+      ```
+
+      #### b. Delete the existing job:
+
+      ```sql
+      SELECT cron.unschedule(jobid);
+      ```
+
+      #### c. Create a new job with updated:
+
+      ```sql
+      SELECT cron.schedule(
+      'job_tag_as_expired',
+      '*/15 * * * *',
+      'CALL sp_tag_as_expired()'
+      );
+      ```
